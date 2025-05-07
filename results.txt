@@ -1,0 +1,23 @@
+Epoch   1 | val_acc=0.8553
+Epoch   2 | val_acc=0.8651
+Epoch   3 | val_acc=0.8684
+Epoch   4 | val_acc=0.8618
+Epoch   5 | val_acc=0.8651
+Epoch   6 | val_acc=0.8717
+Epoch   7 | val_acc=0.8750
+Epoch   8 | val_acc=0.8717
+Confusion Matrix:
+[[142   1   7]
+ [  0  48  10]
+ [  4  17  75]]
+
+Classification Report:
+              precision    recall  f1-score   support
+
+         low       0.97      0.95      0.96       150
+      medium       0.73      0.83      0.77        58
+        high       0.82      0.78      0.80        96
+
+    accuracy                           0.87       304
+   macro avg       0.84      0.85      0.84       304
+weighted avg       0.88      0.87      0.87       304
