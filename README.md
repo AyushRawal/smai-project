@@ -34,7 +34,7 @@ The system analyzes ball trajectory data from tennis match videos, extracts feat
 ## Model Architecture
 
 The model (`HeightNet`) is a simple feedforward neural network with the following architecture:
-- Input layer (4 features): velocity before bounce (x,y), bounce position (x,y)
+- Input layer (12 features): table corners, velocity before bounce (x,y), bounce position (x,y)
 - Hidden layer 1: 64 neurons with ReLU activation and batch normalization
 - Hidden layer 2: 32 neurons with ReLU activation
 - Output layer: 3 neurons (one for each height category)
@@ -77,7 +77,7 @@ python inference.py data/game_1/data.csv path_to_video.mp4 data/game_1/corners.j
 
 ## Model Performance
 
-The model achieves good accuracy across all three height categories. The confusion matrix visualization shows the classification results:
+The model achieves a 78% overall accuracy across the three height categories. The confusion matrix visualization shows the classification results:
 ![confusion matrix](./confusion_matrix.png)
 
 **Classification Report:**
@@ -85,15 +85,16 @@ The model achieves good accuracy across all three height categories. The confusi
 Classification Report:
               precision    recall  f1-score   support
 
-         low       0.97      0.95      0.96       150
-      medium       0.73      0.83      0.77        58
-        high       0.82      0.78      0.80        96
+         low       0.86      0.90      0.88       212
+      medium       0.64      0.52      0.57        58
+        high       0.47      0.50      0.49        34
 
-    accuracy                           0.87       304
-   macro avg       0.84      0.85      0.84       304
-weighted avg       0.88      0.87      0.87       304
+    accuracy                           0.78       304
+   macro avg       0.66      0.64      0.65       304
+weighted avg       0.76      0.78      0.77       304
 ```
 
+The model performs best on low shots, with more challenges in distinguishing between medium and high shots.
 
 ## Data Collection
 
@@ -104,9 +105,10 @@ The data is collected from tennis match videos using the following process:
 4. Calculate velocities and transform positions
 5. Determine height categories based on trajectory analysis
 
-## Future Improvements
+Note that the dataset generation process, while sophisticated, has some inherent limitations. The height classification algorithm can occasionally produce incorrect labels due to:
+- Imperfect ball tracking data in the source footage
+- Challenges in detecting velocity direction changes in complex trajectories
+- Edge cases where the ball crosses multiple break lines rapidly
+- Perspective distortion effects not fully compensated by transformation
 
-- Real-time ball tracking and height prediction
-- Integration with automated video analysis systems
-- Classification of additional shot attributes (spin, power, etc.)
-- Mobile app for on-court training feedback
+These limitations contribute to the classification challenges observed in the model performance, particularly for medium and high shots.

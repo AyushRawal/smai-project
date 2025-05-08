@@ -6,8 +6,9 @@ displays the height category for each frame.
 """
 
 import argparse
-
 import json
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -16,12 +17,10 @@ import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
-from pathlib import Path
-
 
 # Define the HeightNet model (same as in model.py)
 class HeightNet(nn.Module):
-    def __init__(self, in_dim=4, num_classes=3):
+    def __init__(self, in_dim=12, num_classes=3):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_dim, 64),
@@ -50,7 +49,20 @@ def get_scaler(train_csv_path):
     """Create a StandardScaler fitted on training data"""
     train_df = pd.read_csv(train_csv_path)
     X_train = train_df[
-        ["vx_before", "vy_before", "bounce_x", "bounce_y"]
+        [
+            "tx1",
+            "ty1",
+            "tx2",
+            "ty2",
+            "tx3",
+            "ty3",
+            "tx4",
+            "ty4",
+            "vx_before",
+            "vy_before",
+            "bounce_x",
+            "bounce_y",
+        ]
     ].values.astype("float32")
     scaler = StandardScaler().fit(X_train)
     return scaler
@@ -76,6 +88,7 @@ def process_video(
 
     # Map frame numbers to height categories
     frame_to_category = {}
+    frame_to_true_category = {}
     category_colors = {
         "low": (0, 0, 255),  # Red
         "medium": (0, 255, 255),  # Yellow
@@ -86,20 +99,34 @@ def process_video(
         if "bounce_frame" in df.columns:
             frame_num = int(row["bounce_frame"])
             features = np.array(
-                [row["vx_before"], row["vy_before"], row["bounce_x"], row["bounce_y"]]
+                [
+                    row["tx1"],
+                    row["ty1"],
+                    row["tx2"],
+                    row["ty2"],
+                    row["tx3"],
+                    row["ty3"],
+                    row["tx4"],
+                    row["ty4"],
+                    row["vx_before"],
+                    row["vy_before"],
+                    row["bounce_x"],
+                    row["bounce_y"],
+                ]
             )
             category, _ = predict_height_category(model, scaler, features, device)
+            category_true = row["height_category"]
             frame_to_category[frame_num] = category
-
+            frame_to_true_category[frame_num] = category_true
+            
     x1_orig, y1_orig = corners["x1_orig"], corners["y1_orig"]
     x2_orig, y2_orig = corners["x2_orig"], corners["y2_orig"]
     x3_orig, y3_orig = corners["x3_orig"], corners["y3_orig"]
     x4_orig, y4_orig = corners["x4_orig"], corners["y4_orig"]
 
-    s = y3_orig - y2_orig
-    print(s)
-    step1 = s * 0.4
-    step2 = 1.2 * s
+    s = corners["near_net_post_bottom_y"] - corners["near_net_post_top_y"]
+    step1 = s * 1.2
+    step2 = s * 3
     # step3 = 180
     e1_break1_pts = np.array([[x1_orig, y1_orig], [x4_orig, y4_orig]], np.int32)
     e1_break2_pts = np.array(
@@ -165,6 +192,7 @@ def process_video(
         # Check if we have height category info for this frame
         if current_frame in frame_to_category:
             current_category = frame_to_category[current_frame]
+            current_category_true = frame_to_true_category[current_frame]
             last_category_frame = current_frame
 
         # Display category if we're within display window of a categorized frame
@@ -177,6 +205,17 @@ def process_video(
                 frame,
                 f"Height: {current_category.upper()}",
                 (50, 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
+            # show true height category for 2 seconds
+            cv2.putText(
+                frame,
+                f"True Height: {current_category_true.upper()}",
+                (50, 100),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 1,
                 color,
@@ -213,7 +252,9 @@ def main():
         "input_csv", help="Path to the CSV file with frame and bounce data"
     )
     parser.add_argument("video_path", help="Path to the video file")
-    parser.add_argument("corners_json", help="Path to the corners.json corresponding to the video file")
+    parser.add_argument(
+        "corners_json", help="Path to the corners.json corresponding to the video file"
+    )
     parser.add_argument(
         "--model", default="height_net_best.pt", help="Path to the trained model"
     )
@@ -230,7 +271,9 @@ def main():
         corners = json.load(f)
 
     # Process the video
-    process_video(args.input_csv, args.video_path, model, scaler, device, corners, args.output)
+    process_video(
+        args.input_csv, args.video_path, model, scaler, device, corners, args.output
+    )
 
 
 if __name__ == "__main__":

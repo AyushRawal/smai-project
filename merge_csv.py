@@ -1,6 +1,8 @@
-import pandas as pd
-import sys
 import os
+import sys
+
+import pandas as pd
+
 
 def merge_csv_files_from_args(file_paths, output_filename="dataset.csv"):
     """
@@ -12,7 +14,22 @@ def merge_csv_files_from_args(file_paths, output_filename="dataset.csv"):
                                Defaults to "dataset.csv".
     """
     # Define the expected fields based on your description
-    expected_fields = ['bounce_frame', 'vx_before', 'vy_before', 'bounce_x', 'bounce_y', 'height_category']
+    expected_fields = [
+        "bounce_frame",
+        "tx1",
+        "ty1",
+        "tx2",
+        "ty2",
+        "tx3",
+        "ty3",
+        "tx4",
+        "ty4",
+        "vx_before",
+        "vy_before",
+        "bounce_x",
+        "bounce_y",
+        "height_category",
+    ]
 
     if not file_paths:
         print("No input files provided.")
@@ -27,17 +44,19 @@ def merge_csv_files_from_args(file_paths, output_filename="dataset.csv"):
         if not os.path.exists(filename):
             print(f"Error: File not found: {filename}. Skipping.")
             continue
-        if not filename.lower().endswith('.csv'):
-             print(f"Warning: File {filename} does not appear to be a CSV. Skipping.")
-             continue
+        if not filename.lower().endswith(".csv"):
+            print(f"Warning: File {filename} does not appear to be a CSV. Skipping.")
+            continue
 
         try:
             df = pd.read_csv(filename)
 
             # Optional: Add a check to see if the columns match the expected fields
             if not all(field in df.columns for field in expected_fields):
-                 print(f"Warning: File {filename} does not contain all expected fields. Skipping.")
-                 continue
+                print(
+                    f"Warning: File {filename} does not contain all expected fields. Skipping."
+                )
+                continue
 
             # Optional: Reorder columns to match the expected order
             # This prevents issues if columns are in a different order in different files
@@ -62,6 +81,7 @@ def merge_csv_files_from_args(file_paths, output_filename="dataset.csv"):
         print(f"Merged dataframe shape: {merged_df.shape}")
     except Exception as e:
         print(f"Error writing merged file {output_filename}: {e}")
+
 
 if __name__ == "__main__":
     # sys.argv[0] is the script name itself.

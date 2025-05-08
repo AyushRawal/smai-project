@@ -1,12 +1,14 @@
+import argparse  # Import argparse for command line argument parsing
 import csv
 import json
 from pathlib import Path
-import numpy as np
+
 import cv2  # Import cv2 at the top level
-import argparse  # Import argparse for command line argument parsing
+import numpy as np
 
 # Constants
 FPS = 120  # Same FPS as in the original script
+
 
 def transform_ball_position(x, y, transform_matrix):
     """Apply perspective transform to ball position"""
@@ -14,6 +16,7 @@ def transform_ball_position(x, y, transform_matrix):
     dst = cv2.perspectiveTransform(src, transform_matrix)
     tx, ty = dst[0][0]
     return tx, ty
+
 
 def calculate_velocity(positions, frames, fps=FPS):
     """Calculate velocity from positions and frames"""
@@ -28,99 +31,104 @@ def calculate_velocity(positions, frames, fps=FPS):
     vy = dy / dt
     return vx, vy
 
+
 def find_line_interval(a, b, c_values, x0, y0):
-    """Find which interval a point is in relative to three lines"""
+    """
+    Find which interval a point (x0, y0) is in relative to three lines.
+    Lines are defined by ax + by + c = 0.
+    Assumes c_values are ordered: c_values[0] for the lowest line (L0),
+                                 c_values[1] for the middle line (L1),
+                                 c_values[2] for the highest line (L2).
+    Assumes that the expression (a*x0 + b*y0 + c) < 0 means the point (x0,y0)
+    is physically HIGHER than the line.
+    """
     if len(c_values) != 3:
-        print("Error: Exactly three c values must be provided.")
-        raise Exception
-    epsilon = 1e-9
+        # It's better to raise a specific error type
+        raise ValueError("Error: Exactly three c values must be provided.")
+
+    epsilon = 1e-9  # Tolerance for floating-point comparisons
     vals = [a * x0 + b * y0 + c for c in c_values]
-    value_with_index = [(vals[i], i) for i in range(3)]
 
-    # on line
-    if abs(vals[2]) < epsilon: # On the highest break-line (line 2)
-        return "low"
-    if abs(vals[1]) < epsilon: # On the middle break-line (line 1)
-        return "mid"
-    if abs(vals[0]) < epsilon: # On the lowest break-line (line 0)
+    # vals[0] corresponds to L0 (e.g., net height - lowest physical threshold)
+    # vals[1] corresponds to L1 (middle break line threshold)
+    # vals[2] corresponds to L2 (e.g., high break - highest physical threshold)
+
+    # Decision logic based on the assumption: val < 0 means point is physically HIGHER.
+
+    # Case 1: Point is physically higher than the highest line (L2)
+    if vals[2] < -epsilon:
         return "high"
-
-    if vals[2] < -epsilon:  # Point is physically above the highest line (line 2).
-        return "low"
-    # If not above line 2, it's at or below line 2.
-    # Now check against line 1.
-    elif vals[1] < -epsilon: # Point is physically above the middle line (line 1)
-                             # (and implicitly at or below line 2).
-                             # This is the zone between line 1 and line 2.
-        return "mid"
-    # If not above line 1, it's at or below line 1.
-    # Now check against line 0.
-    elif vals[0] < -epsilon: # Point is physically above the lowest line (line 0)
-                             # (and implicitly at or below line 1).
-                             # This is the zone between line 0 and line 1.
-        return "mid"
-    # If not above line 0, it's at or below line 0.
-    else: # Point is physically below the lowest line (line 0)
-          # (i.e., vals[0] > epsilon, since the on-line case for vals[0] is handled).
+    # Case 2: Point is on the highest line (L2)
+    elif abs(vals[2]) < epsilon:
+        # Convention: on the boundary, classify as the higher category or specific.
+        # Here, we can say it meets the "high" threshold boundary.
         return "high"
-    # sorted_values_with_indices = sorted(value_with_index)
-    # val1_s, idx1_s = sorted_values_with_indices[0]
-    # val2_s, idx2_s = sorted_values_with_indices[1]
-    # val3_s, idx3_s = sorted_values_with_indices[2]
-
-    # # Modified logic to achieve more balanced height categorization
-    # if (val1_s < -epsilon and val2_s > epsilon) or (val1_s > epsilon and val2_s < -epsilon):
-    #     if max(idx1_s, idx2_s) == 1:
-    #         return "mid"  # Between first and second lines
-    #     elif max(idx1_s, idx2_s) == 2 and min(idx1_s, idx2_s) == 0:
-    #         return "high"  # Above highest line
-    #     elif max(idx1_s, idx2_s) == 2 and min(idx1_s, idx2_s) == 1:
-    #         return "mid"  # Changed from "high" to "mid" to balance categories
-
-    # if (val2_s < -epsilon and val3_s > epsilon) or (val2_s > epsilon and val3_s < -epsilon):
-    #     if max(idx2_s, idx3_s) == 1:
-    #         return "mid"
-    #     elif max(idx2_s, idx3_s) == 2 and min(idx2_s, idx3_s) == 0:
-    #         return "high"
-    #     elif max(idx2_s, idx3_s) == 2 and min(idx2_s, idx3_s) == 1:
-    #         return "mid"
-
-    # if vals[0] < -epsilon:
-    #     return "low"
-    # elif vals[0] > epsilon:
-    #     if vals[1] < 0:  # If below second line
-    #         print("alert")
-    #         return "low"  # More conservative "low" classification
-    #     else:
-    #         return "high"
-
-    # if vals[2] > epsilon:  # Above the highest line (High-Break)
-    #     return "high"
-    # elif vals[1] > epsilon:  # Above Mid-Break line (but not High-Break) -> between Mid-Break and High-Break
-    #     return "mid"
-    # elif vals[0] > epsilon:  # Above Net (but not Mid-Break) -> between Net and Mid-Break
-    #     return "mid"
-    # else:  # Below Net (or on the net if not caught by earlier 'on line' checks)
-    #     return "low"
-
-
-    # print("Undefined Zone")
-    # return None
+    # Case 3: Point is below L2 (vals[2] > epsilon theoretically)
+    # AND physically higher than the middle line (L1)
+    elif vals[1] < -epsilon:
+        return "mid"
+    # Case 4: Point is on the middle line (L1)
+    elif abs(vals[1]) < epsilon:
+        return "mid" # On the boundary of mid/low, part of "mid" region
+    # Case 5: Point is below L1 (vals[1] > epsilon theoretically)
+    # AND physically higher than the lowest line (L0)
+    elif vals[0] < -epsilon:
+        return "low" # Region between net and mid-break
+    # Case 6: Point is on the lowest line (L0)
+    elif abs(vals[0]) < epsilon:
+        return "low" # On the net
+    # Case 7: Point is physically lower than all lines (including L0)
+    # This means vals[0], vals[1], and vals[2] are all > epsilon
+    else:
+        return "low"
 
 def find_line_interval_from_points(lines_points, x0, y0):
-    """Find which interval a point is in based on line points"""
+    """
+    Find which interval a point is in based on line points.
+    Normalizes the line equation so that the 'b' coefficient (for y)
+    is non-negative, ensuring consistent behavior in find_line_interval.
+    """
     if len(lines_points) != 3:
-        return "Error: Exactly three lines must be provided."
+        raise ValueError("Error: Exactly three lines must be provided.") # Good practice for specific errors
+
+    # Determine 'a' and 'b' from the first line in the set.
+    # These define the slope and orientation, assumed consistent for parallel lines.
     point1_line1 = lines_points[0][0]
     point2_line1 = lines_points[0][1]
     x1_l1, y1_l1 = point1_line1[0], point1_line1[1]
     x2_l1, y2_l1 = point2_line1[0], point2_line1[1]
-    dx = x2_l1 - x1_l1
-    dy = y2_l1 - y1_l1
-    a = dy
-    b = -dx
-    c_values = [-a * lp[0][0] - b * lp[0][1] for lp in lines_points]
-    return find_line_interval(a, b, c_values, x0, y0)
+
+    # Original 'a' and 'b' based on the code's convention:
+    # ax + by + c = 0 where a=dy, b=-dx
+    # So the term with y is (-dx) * y
+    a_orig = y2_l1 - y1_l1  # dy
+    b_orig = -(x2_l1 - x1_l1) # -dx (this is the coefficient for y0 in ax+by+c)
+
+    final_a = a_orig
+    final_b = b_orig
+    sign_flipper = 1.0
+
+    # We want final_b (coefficient of y) to be positive, so that
+    # in 'val = final_a*x0 + final_b*y0 + c_final', a smaller y0 (higher ball)
+    # leads to a smaller 'val'.
+    if final_b < 0:
+        sign_flipper = -1.0
+        final_a = a_orig * sign_flipper
+        final_b = b_orig * sign_flipper # This will now be positive
+
+    # Calculate c_values using the (potentially flipped) final_a and final_b
+    # c = -(ax_pt + by_pt)
+    # Each line in lines_points has its own intercept, but shares the orientation (final_a, final_b)
+    final_c_values = []
+    for line_pair_pts in lines_points:
+        pt_on_line_x, pt_on_line_y = line_pair_pts[0][0], line_pair_pts[0][1] # Use first point of each line
+        c_val = -(final_a * pt_on_line_x + final_b * pt_on_line_y)
+        # If we flipped a and b, c effectively gets multiplied by sign_flipper as well.
+        # However, the above calculation using final_a, final_b directly gives the correct c_val.
+        final_c_values.append(c_val)
+
+    return find_line_interval(final_a, final_b, final_c_values, x0, y0)
+
 
 def get_ball_height_category(tx, ty, break_line1_pts, break_line2_pts, break_line3_pts):
     """Determine ball height category"""
@@ -131,8 +139,10 @@ def get_ball_height_category(tx, ty, break_line1_pts, break_line2_pts, break_lin
     ]
     return find_line_interval_from_points(lines, float(tx), float(ty))
 
-def calculate_post_bounce_height(bounce_frame, frames, BALL_LOOKUP, front_transform,
-                                x_min, x_max, break_lines):
+
+def calculate_post_bounce_height(
+    bounce_frame, frames, BALL_LOOKUP, front_transform, x_min, x_max, break_lines
+):
     """
     Track the ball after bounce and determine its height
     until it reaches table edge or changes velocity direction
@@ -176,7 +186,9 @@ def calculate_post_bounce_height(bounce_frame, frames, BALL_LOOKUP, front_transf
                 # Check if velocity direction changed
                 if last_velocity_y is not None:
                     # If sign changed from positive to negative or vice versa
-                    if (last_velocity_y * current_velocity_y < 0) and abs(current_velocity_y) > 1.0:
+                    if (last_velocity_y * current_velocity_y < 0) and abs(
+                        current_velocity_y
+                    ) > 1.0:
                         velocity_direction_changed = True
                         break
 
@@ -187,7 +199,9 @@ def calculate_post_bounce_height(bounce_frame, frames, BALL_LOOKUP, front_transf
                 break
 
             # Check if we have enough points to make a determination
-            if len(positions) >= 3 and (velocity_direction_changed or len(positions) >= 10):
+            if len(positions) >= 3 and (
+                velocity_direction_changed or len(positions) >= 10
+            ):
                 # If we've collected enough data points, we can make a determination
                 break
 
@@ -195,7 +209,7 @@ def calculate_post_bounce_height(bounce_frame, frames, BALL_LOOKUP, front_transf
         return None
 
     # Find the highest point (minimum y value)
-    min_height = float('inf')  # Track minimum height (maximum y position)
+    min_height = float("inf")  # Track minimum height (maximum y position)
     min_height_index = 0
 
     for i in range(len(positions)):
@@ -207,9 +221,12 @@ def calculate_post_bounce_height(bounce_frame, frames, BALL_LOOKUP, front_transf
     best_position = positions[min_height_index]
 
     # Determine height category using the best position
-    height_category = get_ball_height_category(best_position[0], best_position[1], *break_lines)
+    height_category = get_ball_height_category(
+        best_position[0], best_position[1], *break_lines
+    )
 
     return height_category
+
 
 def main():
     # Argument parser for command line arguments
@@ -218,25 +235,25 @@ def main():
         "--corners",
         type=str,
         default="corners.json",
-        help="Path to the corners coordinates JSON file"
+        help="Path to the corners coordinates JSON file",
     )
     parser.add_argument(
         "--ball_markup",
         type=str,
         default="ball_markup.json",
-        help="Path to the ball markup JSON file"
+        help="Path to the ball markup JSON file",
     )
     parser.add_argument(
         "--event_markup",
         type=str,
         default="events_markup.json",
-        help="Path to the events markup JSON file"
+        help="Path to the events markup JSON file",
     )
     parser.add_argument(
         "--output",
         type=str,
         default="ball_bounce_dataset_from_json.csv",
-        help="Output CSV file for the dataset"
+        help="Output CSV file for the dataset",
     )
     args = parser.parse_args()
 
@@ -289,9 +306,24 @@ def main():
     front_transform, _ = cv2.findHomography(src_points, dst_points, cv2.RANSAC, 0.5)
 
     # Define break lines with adjusted step sizes for better height categorization
-    s = yt3_warp - yt2_warp
-    step1 = s * 0.4
-    step2 = s * 1.2
+    # s = yt3_warp - yt2_warp
+    # step1 = s * 0.4
+    # step2 = s * 1.2
+
+    near_net_post_top_transform = transform_ball_position(
+        CORNERS["near_net_post_top_x"],
+        CORNERS["near_net_post_top_y"],
+        front_transform,
+    )
+    near_net_post_bottom_transform = transform_ball_position(
+        CORNERS["near_net_post_bottom_x"],
+        CORNERS["near_net_post_bottom_y"],
+        front_transform,
+    )
+
+    s = near_net_post_bottom_transform[1] - near_net_post_top_transform[1]
+    step1 = s * 1.2
+    step2 = s * 3
 
     e1_break1_pts = np.array([[xt1_adj, yt1_warp], [xt4_warp, yt4_warp]], np.int32)
     e1_break2_pts = np.array(
@@ -314,18 +346,25 @@ def main():
     x_range_edge1_side = (min(xt4_warp, xt1_adj), max(xt4_warp, xt1_adj))
 
     # Define the middle of the court to determine which break lines to use for balls in the middle
-    mid_court_x = (max(x_range_edge1_side[1], x_range_edge2_side[1]) + min(x_range_edge1_side[0], x_range_edge2_side[0])) / 2
+    mid_court_x = (
+        max(x_range_edge1_side[1], x_range_edge2_side[1])
+        + min(x_range_edge1_side[0], x_range_edge2_side[0])
+    ) / 2
 
     # Define the table boundaries
     table_min_x = min(xt4_warp, xt1_adj, xt2_adj, xt3_warp)
     table_max_x = max(xt4_warp, xt1_adj, xt2_adj, xt3_warp)
 
     # Convert string frame indices to integers for sorting
-    frames = [int(frame) for frame in BALL_LOOKUP.keys() if BALL_LOOKUP[frame]["x"] != -1]
+    frames = [
+        int(frame) for frame in BALL_LOOKUP.keys() if BALL_LOOKUP[frame]["x"] != -1
+    ]
     frames.sort()  # Ensure frames are in order
 
     # Find bounce frames
-    bounce_frames = [int(frame) for frame in EVENT_LOOKUP.keys() if EVENT_LOOKUP[frame] == "bounce"]
+    bounce_frames = [
+        int(frame) for frame in EVENT_LOOKUP.keys() if EVENT_LOOKUP[frame] == "bounce"
+    ]
     bounce_frames.sort()
 
     # Track height category distribution
@@ -336,6 +375,14 @@ def main():
     with dataset_file.open("w", newline="") as csvfile:
         fieldnames = [
             "bounce_frame",
+            "tx1",
+            "ty1",
+            "tx2",
+            "ty2",
+            "tx3",
+            "ty3",
+            "tx4",
+            "ty4",
             "vx_before",
             "vy_before",
             "bounce_x",
@@ -350,7 +397,10 @@ def main():
             bounce_frame_str = str(bounce_frame)
 
             # Get ball position at bounce
-            if bounce_frame_str not in BALL_LOOKUP or BALL_LOOKUP[bounce_frame_str]["x"] == -1:
+            if (
+                bounce_frame_str not in BALL_LOOKUP
+                or BALL_LOOKUP[bounce_frame_str]["x"] == -1
+            ):
                 print(f"No valid ball position for bounce frame {bounce_frame}")
                 continue
 
@@ -358,14 +408,20 @@ def main():
             bounce_y = BALL_LOOKUP[bounce_frame_str]["y"]
 
             # Transform ball position
-            bounce_tx, bounce_ty = transform_ball_position(bounce_x, bounce_y, front_transform)
+            bounce_tx, bounce_ty = transform_ball_position(
+                bounce_x, bounce_y, front_transform
+            )
 
             # Get frames before bounce for velocity calculation
             frame_window = 60  # Same as in original script
-            pre_bounce_frames = [f for f in frames if bounce_frame - frame_window <= f < bounce_frame]
+            pre_bounce_frames = [
+                f for f in frames if bounce_frame - frame_window <= f < bounce_frame
+            ]
 
             if len(pre_bounce_frames) < 2:
-                print(f"Not enough frames before bounce at frame {bounce_frame} for velocity calculation")
+                print(
+                    f"Not enough frames before bounce at frame {bounce_frame} for velocity calculation"
+                )
                 continue
 
             # Collect positions for velocity calculation
@@ -393,32 +449,48 @@ def main():
 
             # Get height category using post-bounce tracking
             height_category = calculate_post_bounce_height(
-                bounce_frame, frames, BALL_LOOKUP, front_transform,
-                table_min_x, table_max_x, bounce_break_lines
+                bounce_frame,
+                frames,
+                BALL_LOOKUP,
+                front_transform,
+                table_min_x,
+                table_max_x,
+                bounce_break_lines,
             )
 
             # If tracking failed, fall back to bounce point calculation
             if height_category is None:
-                height_category = get_ball_height_category(bounce_tx, bounce_ty, *bounce_break_lines)
+                height_category = get_ball_height_category(
+                    bounce_tx, bounce_ty, *bounce_break_lines
+                )
 
                 # Apply height adjustment based on ball's Y position
                 # If the ball is very high up in Y coordinate (lower Y values), adjust to ensure "high"
                 # If the ball is very low in Y coordinate (higher Y values), adjust to ensure "low"
-                if bounce_ty < yt1_warp - 2*step2:  # Far above the highest break line
-                    height_category = "high"
-                elif bounce_ty > yt1_warp + 50:     # Below the table level
-                    height_category = "low"
+                # if bounce_ty < yt1_warp - 2 * step2:  # Far above the highest break line
+                #     height_category = "high"
+                # elif bounce_ty > yt1_warp + 50:  # Below the table level
+                #     height_category = "low"
 
             # Track the distribution of height categories
             height_counts[height_category] += 1
 
             # Write to dataset
+
             data = {
                 "bounce_frame": bounce_frame,
+                "tx1": x1_orig,
+                "ty1": y1_orig,
+                "tx2": x2_orig,
+                "ty2": y2_orig,
+                "tx3": x3_orig,
+                "ty3": y3_orig,
+                "tx4": x4_orig,
+                "ty4": y4_orig,
                 "vx_before": vx_before,
                 "vy_before": vy_before,
-                "bounce_x": bounce_tx,
-                "bounce_y": bounce_ty,
+                "bounce_x": bounce_x,
+                "bounce_y": bounce_y,
                 "height_category": height_category,
             }
             writer.writerow(data)
@@ -432,6 +504,7 @@ def main():
         print(f"{category}: {count} ({percentage:.1f}%)")
 
     print(f"\nDataset created and saved to {dataset_file}")
+
 
 if __name__ == "__main__":
     main()

@@ -6,5 +6,9 @@
     "x3_orig": 1426,
     "y3_orig": 786,
     "x4_orig": 395,
-    "y4_orig": 790
+    "y4_orig": 790,
+    "near_net_post_top_x": 916,
+    "near_net_post_top_y": 762,
+    "near_net_post_bottom_x": 917,
+    "near_net_post_bottom_y": 791
 }
